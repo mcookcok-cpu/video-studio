@@ -48,7 +48,7 @@ Contoh konfigurasi klien:
 
 ```jsonc
 // Klien yang mendukung URL MCP langsung (mis. Claude Desktop via config / klien generik)
-{ "mcpServers": { "video-studio": { "url": "http://100.106.213.94:2500/sse?token=<token>" } } }
+{ "mcpServers": { "video-studio": { "url": "http://100.106.213.94:2500/sse" } } }
 ```
 
 ```bash
@@ -57,13 +57,12 @@ claude mcp add --transport sse  video-studio http://100.106.213.94:2500/sse
 claude mcp add --transport http video-studio http://100.106.213.94:2500/mcp
 ```
 
-**Autentikasi aktif.** Token ada di `.env` (`MCP_TOKEN`, chmod 600, tidak masuk git). `/sse`, `/messages`, dan `/mcp` menolak (401) permintaan tanpa token.
-Kirim header `Authorization: Bearer <token>` (disarankan), atau `?token=<token>` pada URL bila klien tidak bisa mengirim header.
-`/health` dan `/files/*` tetap terbuka (hanya bisa dijangkau dari tailnet) supaya `video_url` bisa dibuka langsung.
+**Tanpa token.** Akses dibatasi oleh jaringan: ufw hanya mengizinkan `tailscale0`, jadi hanya perangkat di tailnet yang bisa menjangkau port 2500/2400. Klien cukup memakai URL di atas.
+Token bersifat opsional: isi `MCP_TOKEN` di `.env` bila ingin mengaktifkannya lagi (lihat `docs/OPERASI.md`), lalu klien mengirim `Authorization: Bearer <token>` atau `?token=<token>`.
 
 ```bash
-claude mcp add --transport http video-studio http://100.106.213.94:2500/mcp --header "Authorization: Bearer <token>"
-claude mcp add --transport sse  video-studio "http://100.106.213.94:2500/sse?token=<token>"
+claude mcp add --transport http video-studio http://100.106.213.94:2500/mcp
+claude mcp add --transport sse  video-studio http://100.106.213.94:2500/sse
 ```
 
 ## 3. Tool MCP
@@ -138,7 +137,7 @@ Spesifikasi lengkap field scene dan parameter tiap grafik ada di **[docs/SPEC.md
 /home/Claude/video-studio
 ├── README.md                 dokumen ini
 ├── ecosystem.config.cjs      konfigurasi pm2 (2 layanan); membaca rahasia dari .env
-├── .env                      MCP_TOKEN, JOB_RETENTION_DAYS (chmod 600, tidak di-commit)
+├── .env                      MCP_TOKEN (kosong = tanpa auth), JOB_RETENTION_DAYS (chmod 600, tidak di-commit)
 ├── requirements.txt          dependensi Python (edge-tts, Pillow, numpy)
 ├── engine.py                 engine generik: spec.json → MP4 (dipanggil oleh MCP)
 ├── build.py                  pustaka render (font, sphere, glow, caption, dll) + generator video "5 Fakta Gila Luar Angkasa"

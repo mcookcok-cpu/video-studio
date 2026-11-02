@@ -22,7 +22,7 @@ Setelah mengubah `ecosystem.config.cjs` (port, env): `pm2 delete video-mcp video
 | `PORT`              | keduanya       | 2500 (MCP) / 2400 (web)       | Port HTTP. |
 | `PUBLIC_BASE`       | video-mcp      | IP Tailscale terdeteksi otomatis (`tailscale ip -4`) | Awalan URL pada balasan tool (`video_url`, `thumbnail_url`). Isi di `.env` hanya bila ingin memaksa host lain (mis. nama MagicDNS). |
 | `VIDEO_STUDIO_ROOT` | semua + Python | `/home/Claude/video-studio`   | Akar proyek (output, jobs, engine). |
-| `MCP_TOKEN`         | video-mcp      | dari `.env` (aktif)           | `/sse`, `/messages`, `/mcp` butuh `Authorization: Bearer <token>` atau `?token=`. Kosongkan di `.env` untuk menonaktifkan. |
+| `MCP_TOKEN`         | video-mcp      | kosong di `.env` (tanpa auth) | `/sse`, `/messages`, `/mcp` butuh `Authorization: Bearer <token>` atau `?token=`. Isi di `.env` untuk mengaktifkan; kosongkan untuk menonaktifkan. |
 | `JOB_RETENTION_DAYS`| video-mcp      | 14                            | Umur maksimum folder `jobs/<id>` yang sudah `done`/`failed` sebelum dihapus otomatis (0 = nonaktif). |
 
 Variabel `MCP_TOKEN`, `JOB_RETENTION_DAYS`, dan `PUBLIC_BASE` dibaca `ecosystem.config.cjs` dari file `.env` di akar proyek. Setelah mengubah `.env`: `pm2 delete video-mcp video-studio && pm2 start ecosystem.config.cjs && pm2 save`.
@@ -83,7 +83,7 @@ cd /home/Claude/video-studio/tests && node mcp-client-test.mjs
 ## 6. Keamanan
 
 - **Jaringan**: layanan mendengarkan `0.0.0.0`, tetapi ufw aktif: port 2400/2500 hanya terjangkau lewat antarmuka `tailscale0` (dari internet publik hanya port 22 dan 80 yang terbuka). Anggap siapa pun di tailnet dapat memakai MCP ini.
-- **Autentikasi**: aktif. `MCP_TOKEN` di `.env` (chmod 600, di-ignore git); dibandingkan dengan `timingSafeEqual`. Token lewat query `?token=` bisa tercatat di log proxy/klien, jadi pakai header `Authorization` bila klien mendukung. `/health`, `/files/*`, dan web 2400 sengaja terbuka (hanya-baca, hanya dari tailnet).
+- **Autentikasi**: dimatikan atas keputusan pemilik; akses hanya lewat jaringan Tailscale (ufw). Bila `MCP_TOKEN` di `.env` diisi, auth aktif kembali; dibandingkan dengan `timingSafeEqual`. Token lewat query `?token=` bisa tercatat di log proxy/klien, jadi pakai header `Authorization` bila klien mendukung. `/health`, `/files/*`, dan web 2400 sengaja terbuka (hanya-baca, hanya dari tailnet).
 - **Dependensi**: `npm audit --omit=dev` bersih (zod 4.6.7, memperbaiki GHSA-mrhx-c7xc-m3w5). Jalankan audit berkala; Python dikunci di `requirements.txt`.
 - **Validasi input**: skema zod membatasi panjang/jumlah field; `voice` & `rate` divalidasi regex; `job_id` wajib 8 heksadesimal (mencegah path traversal); nama file yang dihapus divalidasi regex.
 - **Eksekusi proses**: engine dijalankan lewat `spawn` dengan argumen terpisah (tanpa shell); spec dibaca sebagai JSON, tidak pernah dieksekusi.
@@ -116,4 +116,5 @@ Resolusi/fps ada di `build.py` (`W, H, FPS`). Tata letak (judul y≈1215, subtit
 | 2026-11-02 | Video pertama "5 Fakta Gila Luar Angkasa" (`build.py`), halaman web port 2400. |
 | 2026-11-02 | Engine generik (`engine.py`) + MCP server port 2500 (6 tool, SSE & Streamable HTTP, antrian job). |
 | 2026-11-02 | Proyek dipindah ke `/home/Claude/video-studio`; path dikontrol `VIDEO_STUDIO_ROOT`; ditambah `ecosystem.config.cjs` dan dokumentasi. |
+| 2026-11-02 | Token MCP dimatikan (`MCP_TOKEN` kosong); akses hanya lewat Tailscale. Kode auth tetap ada sebagai opsi. |
 | 2026-11-02 | Perbaikan hasil audit: token MCP aktif (timing-safe); render dijalankan di process group dan dimatikan bersih saat restart/timeout; perbaikan race `running`; ID job dicek tabrakan; zod 3 → 4 (0 kerentanan); retensi job otomatis; poster/metadata per video di web 2400; `bands` dan `out_name` divalidasi; git + `requirements.txt`; `PUBLIC_BASE` otomatis dari Tailscale. |
