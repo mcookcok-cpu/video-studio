@@ -103,7 +103,9 @@ def wrap(text, f, maxw):
     return lines
 
 def num(v, default=0.0):
-    try: return float(v)
+    try:
+        x = float(v)
+        return x if math.isfinite(x) else default
     except Exception: return default
 
 def fmt(v):
@@ -136,7 +138,7 @@ def g_planet(img, od, lt, D, p, ga, sc):
     ang = lt*0.9; mx, my = cx+350*math.cos(ang), cy+90*math.sin(ang); behind = math.sin(ang) < 0
     moon = P.get("moon", True)
     if moon and behind: b.disc(img, mx, my, 26, (235, 235, 255), ga)
-    b.paste_c(img, b.sphere(215, T["base"], T["accent"], rot=lt*0.4, bands=int(num(P.get("bands", 5), 5))), cx, cy, ga)
+    b.paste_c(img, b.sphere(215, T["base"], T["accent"], rot=lt*0.4, bands=max(2, min(9, int(num(P.get("bands", 5), 5))))), cx, cy, ga)
     if moon and not behind: b.disc(img, mx, my, 26, (235, 235, 255), ga)
     b.ring(img, cx, cy, 300+8*math.sin(lt*2), 3, T["accent"], 0.35*ga)
     label_at(od, P, "label", 960, b.ease((lt-1.0)/0.6), GOLD)
@@ -289,7 +291,7 @@ def main():
         pr.stdin.close()
         if pr.wait() != 0: raise RuntimeError("encode video gagal")
         status(stage="mixing audio", progress=0.96)
-        os.makedirs(OUTDIR, exist_ok=True); name = spec.get("out_name") or "video"; out = f"{OUTDIR}/{name}.mp4"; T = meta["total"]
+        os.makedirs(OUTDIR, exist_ok=True); name = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(str(spec.get("out_name") or "video"))).strip(".-")[:80] or "video"; out = f"{OUTDIR}/{name}.mp4"; T = meta["total"]
         if spec.get("music", True):
             vol = max(0.0, min(0.4, num(spec.get("music_volume", 0.16), 0.16)))
             fc = (f"[2:a]volume={vol},afade=t=in:d=2,afade=t=out:st={max(0, T-2.5):.2f}:d=2.5[a2];[1:a][a2]amix=inputs=2:duration=first,volume=2[a]")

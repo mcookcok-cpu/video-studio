@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -12,6 +12,7 @@ import { z } from "zod";
 const PORT = Number(process.env.PORT || 2500);
 const BASE = (process.env.PUBLIC_BASE || `http://100.106.213.94:${PORT}`).replace(/\/$/, "");
 const TOKEN = process.env.MCP_TOKEN || "";
+const JOB_RETENTION_DAYS = Number(process.env.JOB_RETENTION_DAYS || 14); // folder job selesai/gagal lebih tua dari ini dihapus (video di output/ tidak disentuh)
 const ROOT = process.env.VIDEO_STUDIO_ROOT || "/home/Claude/video-studio";
 const JOBS = path.join(ROOT, "jobs");
 const OUT = path.join(ROOT, "output");
@@ -49,22 +50,35 @@ function jobView(id) {
   return v;
 }
 
-const queue = []; let running = null;
+const queue = []; let running = null; let runningProc = null;
+// Matikan satu pohon proses (python + ffmpeg + worker Pool) lewat process group
+function killTree(p, sig = "SIGKILL") {
+  if (!p || !p.pid) return;
+  try { process.kill(-p.pid, sig); } catch { try { p.kill(sig); } catch {} }
+}
 function runNext() {
   if (running || queue.length === 0) return;
   const id = queue.shift(); running = id;
   writeStatus(id, { state: "running", stage: "mulai", progress: 0.01 });
   const log = fs.openSync(path.join(jdir(id), "engine.log"), "a");
-  const p = spawn(PY, [ENGINE, jdir(id)], { stdio: ["ignore", log, log] });
-  const killer = setTimeout(() => { try { p.kill("SIGKILL"); } catch {} }, 25 * 60 * 1000);
-  p.on("close", (code) => {
-    clearTimeout(killer); fs.closeSync(log);
+  let finished = false, killer = null;
+  const finish = (code, err) => {           // idempotent: 'error' dan 'close' bisa datang keduanya
+    if (finished) return; finished = true;
+    clearTimeout(killer); try { fs.closeSync(log); } catch {}
     const st = readJson(path.join(jdir(id), "status.json"), {});
-    if (st.state !== "done") writeStatus(id, { state: "failed", error: st.error || `engine berhenti (kode ${code})` });
-    running = null; runNext();
-  });
-  p.on("error", (e) => { writeStatus(id, { state: "failed", error: String(e) }); running = null; runNext(); });
+    if (err) writeStatus(id, { state: "failed", error: String(err) });
+    else if (st.state !== "done") writeStatus(id, { state: "failed", error: st.error || `engine berhenti (kode ${code})` });
+    if (running === id) { running = null; runningProc = null; }   // jangan menimpa job lain yang sudah mulai
+    runNext();
+  };
+  const p = spawn(PY, [ENGINE, jdir(id)], { stdio: ["ignore", log, log], detached: true });  // detached = process group baru
+  runningProc = p;
+  killer = setTimeout(() => killTree(p), 25 * 60 * 1000);
+  p.on("close", (code) => finish(code));
+  p.on("error", (e) => finish(null, e));
 }
+// sapu engine sisa dari proses server sebelumnya (mis. server di-SIGKILL), supaya job tidak dirender ganda
+try { spawnSync("pkill", ["-9", "-f", `${ENGINE} ${JOBS}/[a-f0-9]{8}$`]); } catch {}
 // pulihkan antrian saat restart
 for (const id of fs.readdirSync(JOBS).filter((x) => ID_RE.test(x)).sort()) {
   const st = readJson(path.join(jdir(id), "status.json"), null);
@@ -168,7 +182,7 @@ function buildServer() {
     async (a) => {
       const total = a.scenes.reduce((n, s) => n + s.narration.length, 0);
       if (total > 3000) return fail(`Total narasi ${total} karakter melebihi batas 3000. Persingkat atau kurangi scene.`);
-      const id = crypto.randomBytes(4).toString("hex");
+      let id; do { id = crypto.randomBytes(4).toString("hex"); } while (fs.existsSync(jdir(id)));
       const name = `${slugify(a.title)}-${id}`;
       fs.mkdirSync(jdir(id), { recursive: true });
       const spec = { title: a.title, scenes: a.scenes, voice: a.voice, rate: a.rate, channel: a.channel || "", music: a.music !== false, music_volume: a.music_volume, out_name: name };
@@ -220,10 +234,18 @@ function buildServer() {
 
 // ---------------------------------------------------------------- HTTP
 const app = express();
+app.disable("x-powered-by");
+const tokenOk = (given) => {
+  if (typeof given !== "string" || !given) return false;
+  const a = crypto.createHash("sha256").update(given).digest();
+  const b = crypto.createHash("sha256").update(TOKEN).digest();
+  return crypto.timingSafeEqual(a, b);
+};
 const auth = (req, res, next) => {
   if (!TOKEN) return next();
   const h = req.headers.authorization || "";
-  if (h === `Bearer ${TOKEN}` || req.query.token === TOKEN) return next();
+  const bearer = h.startsWith("Bearer ") ? h.slice(7) : "";
+  if (tokenOk(bearer) || tokenOk(typeof req.query.token === "string" ? req.query.token : "")) return next();
   res.status(401).json({ error: "unauthorized" });
 };
 
@@ -254,5 +276,26 @@ app.post("/mcp", auth, express.json({ limit: "2mb" }), async (req, res) => {
 });
 const noGet = (req, res) => res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed" }, id: null });
 app.get("/mcp", noGet); app.delete("/mcp", noGet);
+
+// ---------------------------------------------------------------- retensi & shutdown
+function pruneJobs() {
+  if (!(JOB_RETENTION_DAYS > 0)) return;
+  const limit = Date.now() - JOB_RETENTION_DAYS * 86400 * 1000; let n = 0;
+  for (const id of fs.readdirSync(JOBS).filter((x) => ID_RE.test(x))) {
+    if (id === running || queue.includes(id)) continue;
+    const st = readJson(path.join(jdir(id), "status.json"), null);
+    if (st && (st.state === "queued" || st.state === "running")) continue;
+    try { if (fs.statSync(jdir(id)).mtimeMs < limit) { fs.rmSync(jdir(id), { recursive: true, force: true }); n++; } } catch {}
+  }
+  if (n) console.log(`pruneJobs: ${n} folder job lama dihapus`);
+}
+pruneJobs(); setInterval(pruneJobs, 6 * 3600 * 1000).unref();
+
+function shutdown(sig) {                     // pm2 restart/stop: matikan render yang berjalan supaya tidak jadi yatim
+  console.log(`${sig}: berhenti, mematikan render yang berjalan`);
+  killTree(runningProc);
+  process.exit(0);
+}
+process.on("SIGINT", () => shutdown("SIGINT")); process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 app.listen(PORT, "0.0.0.0", () => console.log(`video-mcp jalan di port ${PORT} | base ${BASE}`));

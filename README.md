@@ -48,7 +48,7 @@ Contoh konfigurasi klien:
 
 ```jsonc
 // Klien yang mendukung URL MCP langsung (mis. Claude Desktop via config / klien generik)
-{ "mcpServers": { "video-studio": { "url": "http://100.106.213.94:2500/sse" } } }
+{ "mcpServers": { "video-studio": { "url": "http://100.106.213.94:2500/sse?token=<token>" } } }
 ```
 
 ```bash
@@ -57,7 +57,14 @@ claude mcp add --transport sse  video-studio http://100.106.213.94:2500/sse
 claude mcp add --transport http video-studio http://100.106.213.94:2500/mcp
 ```
 
-Jika `MCP_TOKEN` diaktifkan (lihat `docs/OPERASI.md`), kirim header `Authorization: Bearer <token>` atau tambahkan `?token=<token>` pada URL.
+**Autentikasi aktif.** Token ada di `.env` (`MCP_TOKEN`, chmod 600, tidak masuk git). `/sse`, `/messages`, dan `/mcp` menolak (401) permintaan tanpa token.
+Kirim header `Authorization: Bearer <token>` (disarankan), atau `?token=<token>` pada URL bila klien tidak bisa mengirim header.
+`/health` dan `/files/*` tetap terbuka (hanya bisa dijangkau dari tailnet) supaya `video_url` bisa dibuka langsung.
+
+```bash
+claude mcp add --transport http video-studio http://100.106.213.94:2500/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport sse  video-studio "http://100.106.213.94:2500/sse?token=<token>"
+```
 
 ## 3. Tool MCP
 
@@ -121,6 +128,7 @@ Spesifikasi lengkap field scene dan parameter tiap grafik ada di **[docs/SPEC.md
 | Judul `line1`/`line2`    | maks 24 karakter                                                         |
 | Kecepatan render         | ≈ 2,5 detik per 1 detik video (video 60 dtk ≈ 3 menit)                   |
 | Antrian                  | 1 render pada satu waktu; job lain mengantri (FIFO)                      |
+| Retensi job              | folder `jobs/<id>` selesai/gagal dihapus otomatis setelah 14 hari (`JOB_RETENTION_DAYS`); video di `output/` tidak disentuh |
 | Batas waktu per job      | 25 menit (lalu dihentikan paksa dan berstatus `failed`)                  |
 | Aksara teks              | Latin, Yunani, Sirilik (font DejaVu). Mandarin/Jepang/Arab tidak tampil  |
 
@@ -129,7 +137,9 @@ Spesifikasi lengkap field scene dan parameter tiap grafik ada di **[docs/SPEC.md
 ```
 /home/Claude/video-studio
 ├── README.md                 dokumen ini
-├── ecosystem.config.cjs      konfigurasi pm2 (2 layanan)
+├── ecosystem.config.cjs      konfigurasi pm2 (2 layanan); membaca rahasia dari .env
+├── .env                      MCP_TOKEN, JOB_RETENTION_DAYS (chmod 600, tidak di-commit)
+├── requirements.txt          dependensi Python (edge-tts, Pillow, numpy)
 ├── engine.py                 engine generik: spec.json → MP4 (dipanggil oleh MCP)
 ├── build.py                  pustaka render (font, sphere, glow, caption, dll) + generator video "5 Fakta Gila Luar Angkasa"
 ├── mcp-server/

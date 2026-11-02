@@ -1,1 +1,1 @@
-{"name":"video-mcp","version":"1.0.0","type":"module","main":"server.mjs","dependencies":{"@modelcontextprotocol/sdk":"^1.32.2","express":"^4.22.3","zod":"^3.25.76"}}
+{"name":"video-mcp","version":"1.0.0","type":"module","main":"server.mjs","dependencies":{"@modelcontextprotocol/sdk":"^1.32.2","express":"^4.22.3","zod":"^4.6.7"}}
