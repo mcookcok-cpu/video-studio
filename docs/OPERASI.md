@@ -116,5 +116,6 @@ Resolusi/fps ada di `build.py` (`W, H, FPS`). Tata letak (judul y≈1215, subtit
 | 2026-11-02 | Video pertama "5 Fakta Gila Luar Angkasa" (`build.py`), halaman web port 2400. |
 | 2026-11-02 | Engine generik (`engine.py`) + MCP server port 2500 (6 tool, SSE & Streamable HTTP, antrian job). |
 | 2026-11-02 | Proyek dipindah ke `/home/Claude/video-studio`; path dikontrol `VIDEO_STUDIO_ROOT`; ditambah `ecosystem.config.cjs` dan dokumentasi. |
+| 2026-11-02 | Gaya video baru `style:"explainer"` (latar polos, graphic `sticker` dengan ikon vektor orisinal, subtitle miring kata per kata) — modul `explainer.py` dan `stickers.py`. |
 | 2026-11-02 | Token MCP dimatikan (`MCP_TOKEN` kosong); akses hanya lewat Tailscale. Kode auth tetap ada sebagai opsi. |
 | 2026-11-02 | Perbaikan hasil audit: token MCP aktif (timing-safe); render dijalankan di process group dan dimatikan bersih saat restart/timeout; perbaikan race `running`; ID job dicek tabrakan; zod 3 → 4 (0 kerentanan); retensi job otomatis; poster/metadata per video di web 2400; `bands` dan `out_name` divalidasi; git + `requirements.txt`; `PUBLIC_BASE` otomatis dari Tailscale. |

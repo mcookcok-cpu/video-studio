@@ -21,7 +21,8 @@ const PY = "/usr/bin/python3";
 fs.mkdirSync(JOBS, { recursive: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-const GRAPHICS = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta"];
+const GRAPHICS = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker"];
+const ICONS = ["fan", "wind", "drop", "skin", "skin_evap", "thermometer", "bolt", "sun", "check", "cross"];
 const THEMES = ["orange", "blue", "purple", "teal", "pink", "green", "red", "gold"];
 const ID_RE = /^[a-f0-9]{8}$/;
 
@@ -112,7 +113,11 @@ FIELD TIAP SCENE
     list      : daftar poin muncul bergiliran. params: {items:[string] (maks 6, maks 60 karakter)}
     galaxy    : galaksi spiral berputar.       params: {label1, label2}
     cta       : tombol "+" follow berdenyut.   params: {text}
+    sticker   : (untuk style "explainer") 1-3 stiker ilustrasi beranimasi dengan outline putih.   params: {icons:[nama,...] (maks 3)}
+                nama ikon: ${ICONS.join(" | ")}
 - theme (opsional): ${THEMES.join(" | ")}. Kalau kosong, warna berganti otomatis tiap scene.
+
+STYLE VIDEO (opsional): "cosmic" (default: latar gelap berbintang, judul + grafik) atau "explainer" (latar polos berwarna, stiker ilustrasi, subtitle miring tebal kata per kata, tanpa judul/header/progress; cocok untuk penjelasan singkat ala TikTok). Untuk explainer pakai graphic "sticker" di tiap scene, narasi pendek 1-2 kalimat per scene; line1/line2/badge/theme diabaikan. Warna latar: field bg (hex, default #4664FA).
 
 OPSI VIDEO: title (wajib), voice (default id-ID-ArdiNeural, lihat list_voices), rate (mis. "+4%", "-10%"), channel (teks kecil di header, mis. "FAKTA ANGKASA"),
 music (true/false, musik latar ambient sintetis bebas hak cipta), music_volume (0-0.4, default 0.16).
@@ -175,6 +180,8 @@ function buildServer() {
       scenes: z.array(SceneSchema).min(1).max(12).describe("Daftar scene berurutan (1-12)"),
       voice: z.string().regex(/^[A-Za-z0-9-]{5,60}$/).optional().describe("Nama suara, default id-ID-ArdiNeural"),
       rate: z.string().regex(/^[+-]\d{1,2}%$/).optional().describe("Kecepatan bicara, mis. '+4%' atau '-10%'"),
+      style: z.enum(["cosmic", "explainer"]).optional().describe("Gaya video: cosmic (default) atau explainer (latar polos + stiker + subtitle kata per kata)"),
+      bg: z.string().regex(/^#?[0-9A-Fa-f]{6}$/).optional().describe("Warna latar hex untuk style explainer, mis. #4664FA"),
       channel: z.string().max(30).optional().describe("Teks kecil di header video, mis. 'FAKTA ANGKASA'"),
       music: z.boolean().optional().describe("Musik latar (default true)"),
       music_volume: z.number().min(0).max(0.4).optional().describe("Volume musik 0-0.4 (default 0.16)"),
@@ -185,7 +192,7 @@ function buildServer() {
       let id; do { id = crypto.randomBytes(4).toString("hex"); } while (fs.existsSync(jdir(id)));
       const name = `${slugify(a.title)}-${id}`;
       fs.mkdirSync(jdir(id), { recursive: true });
-      const spec = { title: a.title, scenes: a.scenes, voice: a.voice, rate: a.rate, channel: a.channel || "", music: a.music !== false, music_volume: a.music_volume, out_name: name };
+      const spec = { title: a.title, scenes: a.scenes, voice: a.voice, rate: a.rate, channel: a.channel || "", style: a.style, bg: a.bg, music: a.music !== false, music_volume: a.music_volume, out_name: name };
       fs.writeFileSync(path.join(jdir(id), "spec.json"), JSON.stringify(spec, null, 1));
       fs.writeFileSync(path.join(jdir(id), "job.json"), JSON.stringify({ id, title: a.title, created_at: new Date().toISOString() }));
       writeStatus(id, { state: "queued", stage: "antri", progress: 0 });

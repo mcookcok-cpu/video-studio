@@ -5,6 +5,7 @@ ROOT = os.environ.get("VIDEO_STUDIO_ROOT", "/home/Claude/video-studio")
 sys.path.insert(0, ROOT)
 import numpy as np
 import build as b
+import explainer as X
 from PIL import Image, ImageDraw
 from multiprocessing import Pool
 
@@ -25,7 +26,8 @@ THEMES = {
  "gold":   dict(tint=(130, 70, 10), base=(160, 100, 10), accent=(255, 225, 110), glow=(255, 190, 50)),
 }
 THEME_ORDER = ["purple", "orange", "teal", "blue", "gold", "pink", "green", "red"]
-GRAPHICS_OK = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta"]
+GRAPHICS_OK = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker"]
+STYLE = "cosmic"; BGX = (70, 100, 250)
 GOLD = (255, 214, 90)
 
 def status(**kw):
@@ -222,7 +224,7 @@ def g_cta(img, od, lt, D, p, ga, sc):
     od.rounded_rectangle([cx-14, cy-70, cx+14, cy+70], 12, fill=b.col((60, 25, 90), ga))
     label_at(od, P, "text", 940, b.ease((lt-1.0)/0.8), (255, 255, 255), 48)
 
-GR = dict(statement=g_statement, planet=g_planet, rings=g_rings, bars=g_bars, counter=g_counter, list=g_list, galaxy=g_galaxy, cta=g_cta)
+GR = dict(statement=g_statement, planet=g_planet, rings=g_rings, bars=g_bars, counter=g_counter, list=g_list, galaxy=g_galaxy, cta=g_cta, sticker=X.g_sticker)
 
 def draw_header(od):
     if not HEADER: return
@@ -239,6 +241,11 @@ def draw_badge(img, od, sc, lt):
 
 def render(fi):
     M = b.M; t = fi/FPS; si = b.scene_index(t); sc = M["scenes"][si]; lt = t-sc["start"]; D = sc["dur"]; p = lt/D
+    if STYLE == "explainer":                      # background polos + stiker + subtitle miring kata per kata
+        img = Image.new("RGB", (W, H), BGX); ov = Image.new("RGBA", (W, H), (0, 0, 0, 0)); od = ImageDraw.Draw(ov)
+        GR.get(sc["kind"], g_statement)(img, od, lt, D, p, b.ease(lt/0.5), sc)
+        X.draw_caption(od, sc, lt); img.paste(ov, (0, 0), ov)
+        return img.convert("RGB").tobytes()
     k = b.ease(lt/0.4) if si > 0 else 1.0
     if k < 1.0: arr = (b.BG[si-1].astype(np.float32)*(1-k)+b.BG[si].astype(np.float32)*k).astype(np.uint8)
     else: arr = b.BG[si]
@@ -260,6 +267,9 @@ def clean_spec(spec):
     spec.setdefault("voice", "id-ID-ArdiNeural"); spec.setdefault("rate", "+4%")
     if not re.fullmatch(r"[+-]\d{1,2}%", spec["rate"]): spec["rate"] = "+4%"
     if not re.fullmatch(r"[A-Za-z0-9-]{5,60}", spec["voice"]): raise ValueError("nama voice tidak valid")
+    if spec.get("style") not in ("cosmic", "explainer"): spec["style"] = "cosmic"
+    m = re.fullmatch(r"#?([0-9A-Fa-f]{6})", str(spec.get("bg") or ""))
+    spec["bg"] = m.group(1) if m else "4664FA"
     for s in sc:
         s["narration"] = str(s.get("narration", "")).strip()[:500]
         if not s["narration"]: raise ValueError("narration tiap scene wajib diisi")
@@ -268,11 +278,12 @@ def clean_spec(spec):
     return spec
 
 def main():
-    global JOB, HEADER
+    global JOB, HEADER, STYLE, BGX
     JOB = os.path.abspath(sys.argv[1]); mode = sys.argv[2] if len(sys.argv) > 2 else "full"
     try:
         spec = clean_spec(json.load(open(f"{JOB}/spec.json")))
         HEADER = str(spec.get("channel", ""))[:30]
+        STYLE = spec["style"]; BGX = tuple(int(spec["bg"][i:i+2], 16) for i in (0, 2, 4))
         status(state="running", stage="mulai", progress=0.01, error=None)
         meta = prep(spec)
         b.WORK = JOB; b.init_globals()
