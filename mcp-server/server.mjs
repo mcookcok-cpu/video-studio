@@ -22,7 +22,7 @@ fs.mkdirSync(JOBS, { recursive: true });
 fs.mkdirSync(OUT, { recursive: true });
 
 const GRAPHICS = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker"];
-const ICONS = ["fan", "wind", "drop", "skin", "skin_evap", "thermometer", "bolt", "sun", "check", "cross"];
+const ICONS = ["fan", "wind", "drop", "skin", "skin_evap", "thermometer", "bolt", "sun", "check", "cross", "heart", "lungs", "brain", "glass", "moon", "apple"];
 const THEMES = ["orange", "blue", "purple", "teal", "pink", "green", "red", "gold"];
 const ID_RE = /^[a-f0-9]{8}$/;
 

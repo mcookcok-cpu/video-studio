@@ -168,6 +168,90 @@ ICONS = dict(fan=i_fan, wind=i_wind, drop=i_drop, skin=i_skin, skin_evap=i_skin_
              bolt=i_bolt, sun=i_sun, check=i_check, cross=i_cross)
 
 
+
+def i_heart(t):
+    im, d = _new(); s = 1 + 0.09 * abs(math.sin(t * 5.5)) ** 4
+    def P(x, y): return (320 + (x - 320) * s, 360 + (y - 360) * s)
+    r = 122 * s; c1 = P(232, 260); c2 = P(408, 260)
+    for c in (c1, c2): d.ellipse([c[0]-r, c[1]-r, c[0]+r, c[1]+r], fill=(240, 70, 92))
+    d.polygon([P(120, 318), P(520, 318), P(320, 585)], fill=(240, 70, 92))
+    d.polygon([P(125, 300), P(515, 300), P(320, 570)], fill=(240, 70, 92))
+    d.ellipse([c1[0]-r*0.55, c1[1]-r*0.62, c1[0]-r*0.05, c1[1]-r*0.2], fill=(255, 160, 175))
+    return im
+
+
+def i_lungs(t):
+    im, d = _new(); s = 1 + 0.05 * math.sin(t * 3.2)
+    def X(x): return 320 + (x - 320) * s
+    def Y(y): return 400 + (y - 400) * (1 + 0.03 * math.sin(t * 3.2))
+    for sgn in (-1, 1):
+        x0, x1 = (X(75), X(300)) if sgn < 0 else (X(340), X(565))
+        d.ellipse([x0, Y(190), x1, Y(570)], fill=(255, 150, 165), outline=(205, 85, 110), width=6)
+        d.ellipse([x0 + (60 if sgn < 0 else 20), Y(225), x1 - (20 if sgn < 0 else 60), Y(380)], fill=(255, 175, 188))
+    d.rounded_rectangle([302, 70, 338, 290], 16, fill=(250, 214, 220), outline=(205, 85, 110), width=5)
+    for sgn in (-1, 1):
+        d.line([(320, 270), (320 + sgn * 70, 330), (320 + sgn * 130, 380)], fill=(250, 214, 220), width=20, joint="curve")
+        d.line([(320 + sgn * 70, 330), (320 + sgn * 100, 300)], fill=(250, 214, 220), width=14)
+        d.line([(320 + sgn * 100, 355), (320 + sgn * 150, 440)], fill=(250, 214, 220), width=12)
+    return im
+
+
+def _blob(d, circles, fill, line, w=7):
+    for (x, y, r) in circles: d.ellipse([x-r-w, y-r-w, x+r+w, y+r+w], fill=line)
+    for (x, y, r) in circles: d.ellipse([x-r, y-r, x+r, y+r], fill=fill)
+
+
+def i_brain(t):
+    im, d = _new(); s = 1 + 0.025 * math.sin(t * 3); cx, cy = 320, 280
+    cs = [(cx + 175*s*math.cos(math.radians(a)), cy + 125*s*math.sin(math.radians(a)), 68) for a in range(0, 360, 30)]
+    cs += [(cx, cy, 150)]
+    d.rounded_rectangle([285, 400, 355, 580], 26, fill=(240, 150, 175), outline=(205, 95, 125), width=6)
+    d.ellipse([360, 390, 520, 500], fill=(240, 150, 175), outline=(205, 95, 125), width=6)
+    _blob(d, cs, (255, 175, 195), (205, 95, 125))
+    fold = (205, 95, 125)
+    d.line([(320, 150), (305, 215), (335, 280), (315, 345), (322, 410)], fill=fold, width=7, joint="curve")
+    for (x, y, a0, a1) in [(190, 230, 200, 20), (215, 335, 180, 10), (450, 230, 170, 340), (430, 335, 160, 350), (250, 160, 190, 350), (400, 165, 190, 350)]:
+        d.arc([x-48, y-34, x+48, y+34], a0 % 360, a1 % 360, fill=fold, width=7)
+    return im
+
+
+def i_glass(t):
+    im, d = _new(); f = 0.72 + 0.04 * math.sin(t * 2.4); yt = 150 + (1 - f) * 380
+    d.polygon([(130, 110), (510, 110), (450, 590), (190, 590)], fill=(236, 247, 255))
+    w = [(x, yt + 7 * math.sin(x / 38.0 + t * 3)) for x in range(130, 511, 10)]
+    lx = lambda y: 130 + (y - 110) / 480 * 60; rx = lambda y: 510 - (y - 110) / 480 * 60
+    d.polygon([(lx(yt), yt)] + [(min(max(x, lx(y)), rx(y)), y) for x, y in w] + [(rx(yt), yt), (450, 590), (190, 590)], fill=(96, 192, 255))
+    d.line([(130, 110), (190, 590), (450, 590), (510, 110)], fill=(96, 146, 196), width=9, joint="curve")
+    d.line([(140, 110), (500, 110)], fill=(96, 146, 196), width=9)
+    d.line([(210, 170), (240, 500)], fill=(255, 255, 255), width=14)
+    return im
+
+
+def i_moon(t):
+    im, d = _new(); d.ellipse([110, 110, 530, 530], fill=(255, 224, 110), outline=(240, 170, 40), width=7)
+    d.ellipse([210, 70, 600, 460], fill=(0, 0, 0, 0))
+    for (x, y, r) in [(210, 340, 24), (270, 440, 16), (180, 250, 14)]: d.ellipse([x-r, y-r, x+r, y+r], fill=(255, 200, 80))
+    for k, (x, y) in enumerate([(470, 150), (540, 290), (420, 420)]):
+        z = 16 + 6 * math.sin(t * 4 + k * 2); d.polygon([(x, y-z), (x+z*0.35, y-z*0.35), (x+z, y), (x+z*0.35, y+z*0.35), (x, y+z), (x-z*0.35, y+z*0.35), (x-z, y), (x-z*0.35, y-z*0.35)], fill=(255, 245, 190))
+    return im
+
+
+def i_apple(t):
+    im, d = _new(); s = 1 + 0.02 * math.sin(t * 3)
+    box = [320 - 205*s, 175, 320 + 205*s, 600]
+    d.ellipse([box[0]-8, box[1]-8, box[2]+8, box[3]+8], fill=(170, 30, 45))
+    d.ellipse(box, fill=(238, 64, 70))
+    d.ellipse([282, 160, 358, 240], fill=(170, 30, 45)); d.ellipse([290, 172, 350, 236], fill=(0, 0, 0, 0))
+    d.line([(322, 230), (330, 130), (372, 78)], fill=(120, 80, 40), width=20, joint="curve")
+    d.polygon([(348, 140), (470, 86), (505, 176), (395, 190)], fill=(96, 196, 96), outline=(40, 130, 60))
+    d.line([(352, 150), (470, 120)], fill=(40, 130, 60), width=4)
+    d.ellipse([160, 290, 214, 400], fill=(255, 150, 150))
+    return im
+
+
+ICONS.update(heart=i_heart, lungs=i_lungs, brain=i_brain, glass=i_glass, moon=i_moon, apple=i_apple)
+
+
 def make_sticker(name, t, size, rot=0.0):
     im = ICONS[name](t)
     a = im.split()[3]
