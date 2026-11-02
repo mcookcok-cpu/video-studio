@@ -1,0 +1,41 @@
+{
+  "title": "3 Kebiasaan Pagi Orang Produktif",
+  "channel": "TIPS HARIAN",
+  "voice": "id-ID-ArdiNeural",
+  "rate": "+4%",
+  "music": true,
+  "music_volume": 0.16,
+  "out_name": "contoh-kebiasaan-pagi",
+  "scenes": [
+    {
+      "graphic": "statement", "theme": "purple",
+      "line1": "RAHASIA PAGI", "line2": "ORANG PRODUKTIF",
+      "narration": "Mau hari-harimu lebih produktif? Coba 3 kebiasaan pagi ini.",
+      "params": { "text": "3 Kebiasaan Pagi yang Mengubah Harimu" }
+    },
+    {
+      "graphic": "list", "badge": "1", "theme": "teal",
+      "line1": "MULAI RINGAN", "line2": "3 LANGKAH",
+      "narration": "Pertama, bangun lebih awal. Kedua, tulis tiga prioritas. Ketiga, kerjakan yang tersulit lebih dulu.",
+      "params": { "items": ["Bangun lebih awal", "Tulis 3 prioritas", "Kerjakan yang tersulit dulu"] }
+    },
+    {
+      "graphic": "bars", "badge": "2", "theme": "green",
+      "line1": "WAKTU TERBUANG", "line2": "VS TERPAKAI",
+      "narration": "Orang yang punya rutinitas pagi memakai lebih banyak jam untuk hal penting.",
+      "params": { "unit": " jam", "items": [ { "label": "Fokus kerja", "value": 5 }, { "label": "Scroll medsos", "value": 2 }, { "label": "Menunda", "value": 1 } ] }
+    },
+    {
+      "graphic": "counter", "badge": "3", "theme": "gold",
+      "line1": "EFEKNYA NYATA", "line2": "SETIAP BULAN",
+      "narration": "Dalam 30 hari, kamu bisa menghemat lebih dari 20 jam waktu terbuang.",
+      "params": { "from": 0, "to": 20, "suffix": " jam+", "label": "waktu terhemat dalam 30 hari" }
+    },
+    {
+      "graphic": "cta", "theme": "pink",
+      "line1": "FOLLOW UNTUK", "line2": "TIPS LAINNYA",
+      "narration": "Kebiasaan mana yang mau kamu coba duluan? Tulis di komentar dan follow ya!",
+      "params": { "text": "Follow untuk tips lainnya" }
+    }
+  ]
+}
