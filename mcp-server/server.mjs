@@ -21,7 +21,7 @@ const PY = "/usr/bin/python3";
 fs.mkdirSync(JOBS, { recursive: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-const GRAPHICS = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker"];
+const GRAPHICS = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker", "clip3d"];
 const ICONS = ["fan", "wind", "drop", "skin", "skin_evap", "thermometer", "bolt", "sun", "check", "cross", "heart", "lungs", "brain", "glass", "moon", "apple"];
 const THEMES = ["orange", "blue", "purple", "teal", "pink", "green", "red", "gold"];
 const ID_RE = /^[a-f0-9]{8}$/;
@@ -115,6 +115,7 @@ FIELD TIAP SCENE
     cta       : tombol "+" follow berdenyut.   params: {text}
     sticker   : (untuk style "explainer") 1-3 stiker ilustrasi beranimasi dengan outline putih.   params: {icons:[nama,...] (maks 3)}
                 nama ikon: ${ICONS.join(" | ")}
+    clip3d    : (untuk style "explainer") klip animasi 3D hasil render (assets/clips/<nama>), tampil sebagai stiker.   params: {clip:"nama_klip"}
 - theme (opsional): ${THEMES.join(" | ")}. Kalau kosong, warna berganti otomatis tiap scene.
 
 STYLE VIDEO (opsional): "cosmic" (default: latar gelap berbintang, judul + grafik) atau "explainer" (latar polos berwarna, stiker ilustrasi, subtitle miring tebal kata per kata, tanpa judul/header/progress; cocok untuk penjelasan singkat ala TikTok). Untuk explainer pakai graphic "sticker" di tiap scene, narasi pendek 1-2 kalimat per scene; line1/line2/badge/theme diabaikan. Warna latar: field bg (hex, default #4664FA).

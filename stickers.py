@@ -264,3 +264,17 @@ def make_sticker(name, t, size, rot=0.0):
     out = out.resize((size, size), Image.LANCZOS)
     if rot: out = out.rotate(rot, resample=Image.BICUBIC)
     return out
+
+
+def stickerize(im, size, rot=0.0):
+    """Beri outline putih + bayangan pada RGBA berukuran bebas (mis. frame render 3D)."""
+    a = im.split()[3]
+    halo = a.filter(ImageFilter.GaussianBlur(7)).point(lambda v: 255 if v > 4 else 0)
+    shadow = halo.filter(ImageFilter.GaussianBlur(11)).point(lambda v: int(v * 0.38))
+    out = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    out.paste((16, 26, 120, 255), (0, 12), shadow)
+    out.paste((255, 255, 255, 255), (0, 0), halo)
+    out.alpha_composite(im)
+    out = out.resize((size, size), Image.LANCZOS)
+    if rot: out = out.rotate(rot, resample=Image.BICUBIC)
+    return out

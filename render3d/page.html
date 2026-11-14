@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/libs/three.module.js","three/addons/":"/libs/examples/jsm/"}}</script>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+let renderer, scene, camera, mixer, root = null, clips = [], target = new THREE.Vector3(0, 0.9, 0), dist = 3.6;
+
+function fit(obj) {   // sama dengan viewer: buang outlier FX, skala ke tinggi ~1.75
+  const pts = []; obj.updateMatrixWorld(true);
+  obj.traverse(o => {
+    if (o.isSkinnedMesh && o.skeleton) o.skeleton.bones.forEach(b => pts.push(b.getWorldPosition(new THREE.Vector3())));
+    else if (o.isMesh && o.geometry) { o.geometry.computeBoundingBox(); const b2 = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); pts.push(b2.min.clone(), b2.max.clone()); }
+  });
+  let box = new THREE.Box3();
+  if (pts.length) {
+    const med = a => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
+    const m = new THREE.Vector3(med(pts.map(p => p.x)), med(pts.map(p => p.y)), med(pts.map(p => p.z)));
+    const near = pts.filter(p => p.distanceTo(m) < 3);
+    const xs = near.map(p => p.x).sort((a, b) => a - b), ys = near.map(p => p.y).sort((a, b) => a - b), zs = near.map(p => p.z).sort((a, b) => a - b);
+    const q = (a, f) => a[Math.floor(f * (a.length - 1))];
+    box.min.set(q(xs, .02), q(ys, .02), q(zs, .02)); box.max.set(q(xs, .98), q(ys, .98), q(zs, .98));
+  } else box.setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3()), s = 1.75 / Math.max(size.x, size.y, size.z, 0.001);
+  obj.scale.setScalar(s); obj.position.y -= box.min.y * s;
+  const c = box.getCenter(new THREE.Vector3()); obj.position.x -= c.x * s; obj.position.z -= c.z * s;
+}
+
+window.R = {
+  init(w, h) {
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1); renderer.setSize(w, h, false); renderer.setClearColor(0x000000, 0);
+    scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(28, w / h, 0.05, 100);
+    scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x6a78b8, 1.5));
+    const key = new THREE.DirectionalLight(0xffffff, 2.3); key.position.set(3, 6, 4); scene.add(key);
+    const rim = new THREE.DirectionalLight(0x9fb4ff, 1.0); rim.position.set(-4, 3, -3); scene.add(rim);
+    const gl = renderer.getContext(); const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'webgl';
+  },
+  async load(file) {
+    if (root) { scene.remove(root); root = null; }
+    const g = await new GLTFLoader().loadAsync('/models/' + file);
+    root = g.scene; fit(root); scene.add(root); clips = g.animations; mixer = new THREE.AnimationMixer(root);
+    return clips.map(c => ({ name: c.name, duration: +c.duration.toFixed(3) }));
+  },
+  frame(name, t, azimDeg, distance, targetY) {
+    const clip = clips.find(c => c.name === name);
+    mixer.stopAllAction();
+    if (clip) { const a = mixer.clipAction(clip); a.play(); mixer.setTime(t); }
+    const a = azimDeg * Math.PI / 180, d = distance || dist, ty = targetY ?? 0.9;
+    camera.position.set(Math.sin(a) * d, ty + 0.35, Math.cos(a) * d); camera.lookAt(0, ty, 0);
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/png');
+  },
+};
+</script>

@@ -1,5 +1,6 @@
 """Gaya video 'explainer': background polos, stiker ilustrasi, subtitle miring tebal kata per kata."""
-import math, os
+import math, os, re, json
+from functools import lru_cache
 from PIL import ImageFont
 import stickers as ST
 
@@ -69,3 +70,31 @@ def draw_caption(od, sc, lt):
             od.text((x, y + dy + 7), w["text"], font=f, fill=(20, 22, 110, 140), anchor="lm", stroke_width=11, stroke_fill=(20, 22, 110, 140))
             od.text((x, y + dy), w["text"], font=f, fill=fill, anchor="lm", stroke_width=9, stroke_fill=(42, 40, 160, 255))
         x += tw + sp
+
+
+CLIPS = os.path.join(os.environ.get("VIDEO_STUDIO_ROOT", "/home/Claude/video-studio"), "assets", "clips")
+
+
+@lru_cache(maxsize=None)
+def _clip_meta(name):
+    try: return json.load(open(f"{CLIPS}/{name}/clip.json"))
+    except Exception: return None
+
+
+@lru_cache(maxsize=40)
+def _clip_frame(name, i):
+    from PIL import Image
+    return Image.open(f"{CLIPS}/{name}/f_{i + 1:04d}.png").convert("RGBA")
+
+
+def g_clip3d(img, od, lt, D, p, ga, sc):
+    """Klip hasil render 3D (assets/clips/<nama>/f_0001.png ...) sebagai stiker beranimasi."""
+    name = str(sc["params"].get("clip", ""))
+    if not re.fullmatch(r"[a-z0-9_-]{1,40}", name): return
+    m = _clip_meta(name)
+    if not m: return
+    k = pop((lt - 0.05) / 0.40)
+    if k <= 0: return
+    i = max(0, min(m["n"] - 1, int(lt * m["fps"])))
+    layer = ST.stickerize(_clip_frame(name, i), max(16, int(900 * k)))
+    img.paste(layer, (540 - layer.width // 2, 790 - layer.height // 2), layer)

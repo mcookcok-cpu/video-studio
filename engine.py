@@ -26,7 +26,7 @@ THEMES = {
  "gold":   dict(tint=(130, 70, 10), base=(160, 100, 10), accent=(255, 225, 110), glow=(255, 190, 50)),
 }
 THEME_ORDER = ["purple", "orange", "teal", "blue", "gold", "pink", "green", "red"]
-GRAPHICS_OK = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker"]
+GRAPHICS_OK = ["statement", "planet", "rings", "bars", "counter", "list", "galaxy", "cta", "sticker", "clip3d"]
 STYLE = "cosmic"; BGX = (70, 100, 250)
 GOLD = (255, 214, 90)
 
@@ -48,9 +48,84 @@ async def tts(text, path, voice, rate):
             elif ch["type"] == "WordBoundary": words.append((ch["offset"]/1e7, ch["duration"]/1e7, ch["text"]))
     return words
 
+POCKET_URL = os.environ.get("POCKET_TTS_URL", "http://127.0.0.1:6001")
+
+def tts_pocket(text, path, voice, style="percakapan", jeda_skala=1.0):
+    """Narasi dari server Pocket TTS (port 6001, mode Eksperimental), disimpan sebagai mp3 di `path`.
+    Server tidak memberi waktu per kata, jadi waktunya dihitung di sini: batas kalimat dicari dari
+    jeda senyap di audio (n kalimat = n-1 jeda terpanjang), lalu kata dibagi sesuai panjangnya
+    di dalam tiap kalimat. Mengembalikan [(mulai, durasi, teks)] atau None (pakai pembagian rata)."""
+    import urllib.request
+    body = json.dumps({"segmen": [{"teks": text.replace("!", ".")}], "voice": voice, "style": style,
+                       "jeda_skala": jeda_skala, "pecah_koma": False}).encode()
+    req = urllib.request.Request(POCKET_URL + "/tts/script-eksp", body, {"Content-Type": "application/json"})
+    wav = path.rsplit(".", 1)[0] + "_pocket.wav"
+    with urllib.request.urlopen(req, timeout=300) as r:
+        open(wav, "wb").write(r.read())
+    sh(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-ar", "44100", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "192k", path])
+    dur = b.probe(wav)
+    err = subprocess.run(["ffmpeg", "-i", wav, "-af", "silencedetect=noise=-38dB:d=0.2", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", err)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", err)]
+    os.remove(wav)
+    lead, speech_end, gaps = 0.0, dur, []
+    for k, st in enumerate(starts):
+        en = ends[k] if k < len(ends) else None
+        if st < 0.05 and en is not None: lead = en
+        elif en is None or en >= dur - 0.05: speech_end = max(st, lead + 0.1)
+        else: gaps.append((st, en))
+    sents = [x for x in re.split(r"(?<=[.?!])\s+", text.strip()) if x]
+    if len(sents) > 1:
+        if len(gaps) < len(sents) - 1: return None
+        gaps = sorted(sorted(gaps, key=lambda g: g[1] - g[0], reverse=True)[:len(sents) - 1])
+    else:
+        gaps = []
+    t_start = [lead] + [g[1] for g in gaps]
+    t_end = [g[0] for g in gaps] + [speech_end]
+    words = []
+    for j, sent in enumerate(sents):
+        toks = sent.split()
+        wts = [len(t) + 2 + (3 if t[-1:] == "," else 0) for t in toks]
+        tot = float(sum(wts)); cur = t_start[j]; span = max(0.2, t_end[j] - t_start[j])
+        for t, w in zip(toks, wts):
+            d = span * w / tot; words.append((cur, d, t)); cur += d
+    return words
+
 def sh(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0: raise RuntimeError("ffmpeg gagal: " + r.stderr[-400:])
+
+SFX_DIR = os.path.join(os.environ.get("VIDEO_STUDIO_ROOT", os.path.dirname(os.path.abspath(__file__))), "assets", "sfx")
+
+def sfx_list(scenes):
+    """Daftar (file, waktu_mulai_detik, volume) dari field 'sfx' tiap scene.
+    sfx: "nama" | {"name": "nama", "at": detik_setelah_scene_mulai (default 0.3), "volume": 0.1-2.0 (default 0.6)} | [daftar keduanya]"""
+    out = []
+    for sc in scenes:
+        v = sc.get("sfx")
+        if not v: continue
+        for it in (v if isinstance(v, list) else [v])[:3]:
+            if isinstance(it, str): it = {"name": it}
+            if not isinstance(it, dict): continue
+            name = str(it.get("name", ""))
+            if not re.fullmatch(r"[a-z0-9_-]{1,60}", name): continue
+            f = f"{SFX_DIR}/{name}.mp3"
+            if not os.path.exists(f): print("sfx tidak ditemukan:", name, flush=True); continue
+            at = max(0.0, min(num(it.get("at", 0.3), 0.3), sc["dur"] - 0.1))
+            out.append((f, sc["start"] + at, max(0.1, min(2.0, num(it.get("volume", 0.6), 0.6)))))
+    return out
+
+def mix_sfx(scenes, total):
+    L = sfx_list(scenes)
+    if not L: return
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", f"{JOB}/narration.wav"]
+    for f, _, _ in L: cmd += ["-i", f]
+    parts = [f"[{k+1}:a]aresample=44100,aformat=channel_layouts=stereo,volume={v:.2f},adelay={int(t*1000)}|{int(t*1000)}[x{k}]" for k, (f, t, v) in enumerate(L)]
+    ins = "[0:a]" + "".join(f"[x{k}]" for k in range(len(L)))
+    fc = ";".join(parts) + f";{ins}amix=inputs={len(L)+1}:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.95[a]"
+    sh(cmd + ["-filter_complex", fc, "-map", "[a]", "-ar", "44100", "-ac", "2", f"{JOB}/narration_mix.wav"])
+    os.replace(f"{JOB}/narration_mix.wav", f"{JOB}/narration.wav")
 
 def prep(spec):
     scenes, t0, n = [], 0.0, len(spec["scenes"])
@@ -59,7 +134,12 @@ def prep(spec):
         words = None
         for attempt in range(3):
             try:
-                words = asyncio.run(tts(sc["narration"], mp3, spec["voice"], spec["rate"])); break
+                if spec.get("pocket_voice"):
+                    words = tts_pocket(sc["narration"], mp3, spec["pocket_voice"], spec.get("pocket_style") or "percakapan",
+                                       num(spec.get("pocket_jeda", 1.0), 1.0))
+                else:
+                    words = asyncio.run(tts(sc["narration"], mp3, spec["voice"], spec["rate"]))
+                break
             except Exception as e:
                 if attempt == 2: raise RuntimeError(f"TTS gagal (voice {spec['voice']}): {e}")
                 time.sleep(2)
@@ -72,7 +152,7 @@ def prep(spec):
         wl = [{"s": w[0]+LEAD, "d": w[1], "text": w[2]} for w in words]
         scenes.append(dict(kind=sc.get("graphic") or "statement", num=sc.get("badge"), t1=sc.get("line1") or "", t2=sc.get("line2") or "",
                            tint=list(THEMES[theme]["tint"]), theme=theme, params=sc.get("params") or {}, text=sc["narration"],
-                           start=t0, dur=dur, adur=adur, words=wl))
+                           start=t0, dur=dur, adur=adur, words=wl, sfx=sc.get("sfx")))
         t0 += dur
         status(stage=f"membuat suara {i+1}/{n}", progress=round(0.02+0.10*(i+1)/n, 3))
     meta = {"scenes": scenes, "total": t0}
@@ -85,6 +165,7 @@ def prep(spec):
         lst.append(f"file '{wav}'")
     open(f"{JOB}/list.txt", "w").write("\n".join(lst))
     sh(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", f"{JOB}/list.txt", "-c", "copy", f"{JOB}/narration.wav"])
+    mix_sfx(scenes, t0)
     if spec.get("music", True):
         T = t0+1
         expr = ("0.35*sin(2*PI*110*t)+0.25*sin(2*PI*164.81*t)*(0.7+0.3*sin(2*PI*0.13*t))"
@@ -224,7 +305,7 @@ def g_cta(img, od, lt, D, p, ga, sc):
     od.rounded_rectangle([cx-14, cy-70, cx+14, cy+70], 12, fill=b.col((60, 25, 90), ga))
     label_at(od, P, "text", 940, b.ease((lt-1.0)/0.8), (255, 255, 255), 48)
 
-GR = dict(statement=g_statement, planet=g_planet, rings=g_rings, bars=g_bars, counter=g_counter, list=g_list, galaxy=g_galaxy, cta=g_cta, sticker=X.g_sticker)
+GR = dict(statement=g_statement, planet=g_planet, rings=g_rings, bars=g_bars, counter=g_counter, list=g_list, galaxy=g_galaxy, cta=g_cta, sticker=X.g_sticker, clip3d=X.g_clip3d)
 
 def draw_header(od):
     if not HEADER: return
@@ -267,6 +348,7 @@ def clean_spec(spec):
     spec.setdefault("voice", "id-ID-ArdiNeural"); spec.setdefault("rate", "+4%")
     if not re.fullmatch(r"[+-]\d{1,2}%", spec["rate"]): spec["rate"] = "+4%"
     if not re.fullmatch(r"[A-Za-z0-9-]{5,60}", spec["voice"]): raise ValueError("nama voice tidak valid")
+    if spec.get("pocket_voice") and not re.fullmatch(r"[A-Za-z0-9_-]{1,60}", str(spec["pocket_voice"])): raise ValueError("pocket_voice tidak valid")
     if spec.get("style") not in ("cosmic", "explainer"): spec["style"] = "cosmic"
     m = re.fullmatch(r"#?([0-9A-Fa-f]{6})", str(spec.get("bg") or ""))
     spec["bg"] = m.group(1) if m else "4664FA"
@@ -275,6 +357,7 @@ def clean_spec(spec):
         if not s["narration"]: raise ValueError("narration tiap scene wajib diisi")
         if s.get("graphic") not in GRAPHICS_OK: s["graphic"] = "statement"
         if s.get("theme") not in THEMES: s["theme"] = None
+        if "sfx" in s and not isinstance(s["sfx"], (str, dict, list)): s.pop("sfx")
     return spec
 
 def main():
@@ -305,7 +388,7 @@ def main():
         os.makedirs(OUTDIR, exist_ok=True); name = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(str(spec.get("out_name") or "video"))).strip(".-")[:80] or "video"; out = f"{OUTDIR}/{name}.mp4"; T = meta["total"]
         if spec.get("music", True):
             vol = max(0.0, min(0.4, num(spec.get("music_volume", 0.16), 0.16)))
-            fc = (f"[2:a]volume={vol},afade=t=in:d=2,afade=t=out:st={max(0, T-2.5):.2f}:d=2.5[a2];[1:a][a2]amix=inputs=2:duration=first,volume=2[a]")
+            fc = (f"[2:a]volume={vol},afade=t=in:d=2,afade=t=out:st={max(0, T-2.5):.2f}:d=2.5[a2];[1:a][a2]amix=inputs=2:duration=first,volume=2,alimiter=limit=0.95[a]")
             sh(["ffmpeg", "-y", "-loglevel", "error", "-i", silent, "-i", f"{JOB}/narration.wav", "-i", f"{JOB}/music.wav", "-filter_complex", fc,
                 "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{T:.2f}", out])
         else:
